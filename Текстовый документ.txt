@@ -1,0 +1,71 @@
+import requests
+from bs4 import BeautifulSoup
+from datetime import datetime
+import re
+
+
+def get_current_temperature(city_name):
+    response = requests.get(f"https://ua.sinoptik.ua/{city_name}")
+
+    if not response.ok:
+        print(f"Failed to fetch current temperature for {city_name.capitalize()}.")
+        return None
+
+    text = response.text
+    current_temp = re.findall('<p class="today-temp">(.+)&deg;C</p>', text)
+
+    if current_temp:
+        return current_temp[0]
+    else:
+        print(f"Current temperature not found for {city_name.capitalize()}.")
+        return None
+
+
+def get_historical_temperatures(city_url):
+    url = f'https://ua.sinoptik.ua{city_url}/archive'
+    response = requests.get(url)
+
+    if not response.ok:
+        print(f"Failed to fetch historical temperatures. Status code: {response.status_code}")
+        return None
+
+    soup = BeautifulSoup(response.text, 'html.parser')
+    table = soup.find('table', class_='archive-table')
+
+    if not table:
+        print("Table not found on the page.")
+        return None
+
+    rows = table.find_all('tr')[1:]  # Skip header row
+    temperatures = []
+
+    for row in rows:
+        columns = row.find_all('td')
+        date_str = columns[0].text.strip()
+        date = datetime.strptime(date_str, '%d.%m.%Y')
+        max_temp = int(columns[1].text.strip().replace('°', ''))
+        min_temp = int(columns[2].text.strip().replace('°', ''))
+
+        temperatures.append({'date': date, 'max_temp': max_temp, 'min_temp': min_temp})
+
+    return temperatures
+
+
+if __name__ == "__main__":
+    city_name = input("Enter the city name in Ukrainian (e.g., kyiv, lviv, kharkiv): ")
+    city_url = f'/{city_name}'
+
+    # Get and print current temperature
+    current_temperature = get_current_temperature(city_name)
+    if current_temperature:
+        print(f"\nCurrent temperature in {city_name.capitalize()}: {current_temperature}°C\n")
+
+    # Get and print historical temperatures
+    historical_temperatures = get_historical_temperatures(city_url)
+    if historical_temperatures:
+        print(f"\nHistorical temperatures for {city_name.capitalize()}:\n")
+        for entry in historical_temperatures:
+            print(
+                f"Date: {entry['date'].strftime('%Y-%m-%d')}, Max Temperature: {entry['max_temp']}°C, Min Temperature: {entry['min_temp']}°C")
+    else:
+        print("Failed to retrieve historical temperatures.")
